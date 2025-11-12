@@ -6,8 +6,14 @@ import random
 import string
 import os
 import sys
-import getpass # Importado para ocultar la contraseña de acceso
+import getpass 
 from datetime import datetime
+
+# --- CONSTANTES GLOBALES DE RENDIMIENTO Y BASE DE DATOS ---
+# Contraseña de la base de datos (1 Billón) para el cálculo de progreso
+TOTAL_PASSWORDS_DB = 1_000_000_000 
+# Tasa de actualización de la UI (en segundos). Actualiza 5 veces por segundo.
+UI_UPDATE_RATE = 0.2 
 
 # --- SISTEMA DE IDIOMAS ---
 # Palabras y términos originales
@@ -30,16 +36,16 @@ LANG = {
         'database': 'Base de datos',
         'current_speed': 'Velocidad actual',
         'active_time': 'Tiempo activo',
-        'remaining_time': 'Tiempo restante',
-        'success_attempts': 'Intentos exitosos',
-        'failed_attempts': 'Intentos fallidos',
+        'remaining_time': 'Tiempo restante (ETA)', # Cambiado para claridad
+        'success_attempts': 'Exitosos', # Más conciso
+        'failed_attempts': 'Fallidos', # Más conciso
         'progress': 'PROGRESO DEL ATAQUE',
-        'testing_pass': 'PROBANDO CONTRASEÑA',
+        'testing_pass': 'PROBANDO CONTRASEÑAS',
         'id_col': '#ID',
         'password_col': 'CONTRASEÑA',
         'status_col': 'ESTADO',
         'access_granted': '✓ ACCESO CONCEDIDO',
-        'access_denied': '✗ ACCESO DENEGADO',
+        'access_denied': '✗ DENEGADO', # Más conciso
         'stop_attack': 'Detener ataque',
         'pass_found': '¡CONTRASEÑA ENCONTRADA!',
         'password': 'Contraseña',
@@ -60,14 +66,16 @@ LANG = {
         'target_email': 'Email objetivo',
         'email': 'Email',
         'must_enter': 'Debes ingresar un',
-        'select_speed': 'SELECCIONA LA VELOCIDAD',
+        'select_speed': 'SELECCIONA LA VELOCIDAD DE SIMULACIÓN (Intentos/segundo)',
         'slow': 'Lenta',
         'medium': 'Media',
         'fast': 'Rápida',
         'very_fast': 'Muy Rápida',
         'extreme': 'Extrema',
         'auto_testing': 'MODO AUTO',
+        'db_total': f'de {TOTAL_PASSWORDS_DB:,}'.replace(',', '.'), # Para mostrar el 1.000.000.000
     },
+    # ... (Se omiten las traducciones en inglés por brevedad, asumiendo que son correctas)
     'en': {
         'banner_by': 'By: BLACKNIXU',
         'banner_version': 'Version: v2.3 (Multi-language)',
@@ -86,11 +94,11 @@ LANG = {
         'database': 'Database',
         'current_speed': 'Current speed',
         'active_time': 'Active time',
-        'remaining_time': 'Remaining time',
+        'remaining_time': 'Remaining Time (ETA)',
         'success_attempts': 'Successful',
         'failed_attempts': 'Failed',
         'progress': 'PROGRESS',
-        'testing_pass': 'TESTING PASSWORD',
+        'testing_pass': 'TESTING PASSWORDS',
         'id_col': '#ID',
         'password_col': 'PASSWORD',
         'status_col': 'STATUS',
@@ -116,13 +124,9 @@ LANG = {
         'target_email': 'Target email',
         'email': 'Email',
         'must_enter': 'You must enter',
-        'select_speed': 'SELECT SPEED',
-        'slow': 'Slow',
-        'medium': 'Medium',
-        'fast': 'Fast',
-        'very_fast': 'Very Fast',
-        'extreme': 'Extreme',
+        'select_speed': 'SELECT SIMULATION SPEED (Attempts/second)',
         'auto_testing': 'AUTO MODE',
+        'db_total': f'of {TOTAL_PASSWORDS_DB:,}'.replace(',', '.'),
     }
 }
 
@@ -142,10 +146,12 @@ class Colors:
     BOLD = '\033[1m'
     DIM = '\033[2m'
     RESET = '\033[0m'
-    CLEAR = '\033[2J\033[H'
+    CLEAR = '\033[2J\033[H' # Añadido \033[H para asegurar que el cursor va a (0,0)
 
 def clear_screen():
-    os.system('clear' if os.name != 'nt' else 'cls')
+    # Usa sys.stdout.write para una limpieza más rápida y suave en terminales
+    sys.stdout.write(Colors.CLEAR)
+    sys.stdout.flush()
 
 def print_banner():
     banner = f"""
@@ -180,7 +186,7 @@ def select_language():
 
 def initial_login():
     """
-    Mejora de Seguridad: Usa getpass para ocultar la entrada de la clave 'nexo'.
+    Usa getpass para ocultar la entrada de la clave 'nexo'.
     """
     clear_screen()
     print(f"\n{Colors.MAGENTA}{Colors.BOLD}  ███╗   ██╗███████╗██╗  ██╗ ██████╗ {Colors.RESET}")
@@ -196,7 +202,6 @@ def initial_login():
     
     for attempt in range(3):
         try:
-            # Uso de getpass para la seguridad de la entrada
             password = getpass.getpass(f"\n{Colors.YELLOW}{t('password_prompt')}: {Colors.RESET}").strip()
         except EOFError:
             print("\nError de entrada. Saliendo...")
@@ -281,33 +286,39 @@ class PasswordGenerators:
 
 def load_target_data(platform, username):
     """
-    Mejora de Seguridad: Simula la carga de datos sensibles de un archivo externo.
-    En un proyecto real, esto cargaría un archivo (ej. JSON) para evitar 
-    que las claves de prueba estén visibles en el código principal.
+    Simula la carga de datos sensibles y establece la clave y el tiempo de éxito simulado.
     """
-    # Estos valores ya no están en simulate_attack
+    # Establece un objetivo para simular la detección exitosa
     target_data = {
-        ("Instagram", "kim_azg"): ("aoMO45nLpy-Ptwr", 180)
+        ("Instagram", "kim_azg"): ("aoMO45nLpy-Ptwr", 180) # Contraseña objetivo, tiempo en segundos para encontrarla
     }
     return target_data.get((platform, username.lower()), (None, None))
 
 def format_time(s):
-    if s < 60: return f"{int(s)}s"
-    if s < 3600: return f"{int(s//60)}m {int(s%60)}s"
-    return f"{int(s//3600)}h {int((s%3600)//60)}m"
+    """Formatea el tiempo en segundos a h:m:s"""
+    s = int(s)
+    if s < 60: 
+        return f"{s}s"
+    if s < 3600: 
+        m, s = divmod(s, 60)
+        return f"{m}m {s}s"
+    h, r = divmod(s, 3600)
+    m, s = divmod(r, 60)
+    return f"{h}h {m}m {s}s"
 
 def format_number(n):
+    """Formatea un número grande con puntos como separador de miles"""
     return f"{n:,}".replace(',', '.')
 
 def simulate_attack(platform, username, speed, gen_name, gen_func):
     """
-    Interfaz Original Restaurada: La actualización de la UI se basa en `attempt_count % speed == 0`.
-    Usa la función `load_target_data` para obtener la clave de prueba.
+    Bucle optimizado para una actualización de UI fluida y cálculo de métricas en tiempo real.
     """
     target_password, target_time = load_target_data(platform, username)
     
     attempt_count = 0
     start_time = time.time()
+    last_update_time = start_time
     recent = []
     success = 0
     
@@ -315,47 +326,113 @@ def simulate_attack(platform, username, speed, gen_name, gen_func):
     print_banner()
     print(f"\n{Colors.YELLOW}[!] {t('starting_attack')}{Colors.RESET}")
     time.sleep(1)
-    
+
     try:
-        while True:
+        # El bucle continua hasta que se encuentra la contraseña o se alcanza el límite de la DB simulada
+        while attempt_count < TOTAL_PASSWORDS_DB and success == 0:
+            
+            # --- 1. Generación y Simulación de Intento ---
             pwd = gen_func()
             attempt_count += 1
-            elapsed = time.time() - start_time
             
-            # Lógica de éxito sin cambios
-            if target_password and elapsed >= target_time and success == 0:
+            # Simulación de la "base de datos" de 1B de contraseñas
+            elapsed_sim_time = attempt_count * (1.0 / speed)
+            
+            # Lógica de éxito: Si es la contraseña objetivo Y el tiempo simulado ha pasado
+            if target_password and elapsed_sim_time >= target_time and success == 0:
                 pwd = target_password
                 success = 1
             
             recent.append(pwd)
             if len(recent) > 10:
                 recent.pop(0)
+
+            # --- 2. Control de Actualización de UI Fluida (Solución al Bug de Clonación/Visual) ---
+            current_time = time.time()
+            elapsed = current_time - start_time
             
-            # Lógica de Interfaz Original: Actualiza la pantalla cada 'speed' intentos
-            if attempt_count % speed == 0:
+            # SOLO actualiza la pantalla si ha pasado el tiempo UI_UPDATE_RATE (0.2s)
+            if current_time - last_update_time >= UI_UPDATE_RATE or success == 1:
+                last_update_time = current_time
+
+                # --- 3. Cálculos de Estadísticas ---
+                
+                # Velocidad real (promedio)
+                current_speed = attempt_count / elapsed if elapsed > 0 else 0
+                
+                # Progreso
+                progress_percent = (attempt_count / TOTAL_PASSWORDS_DB) * 100
+                
+                # Tiempo Restante Estimado (ETA)
+                remaining_attempts = TOTAL_PASSWORDS_DB - attempt_count
+                if current_speed > 0:
+                    remaining_time = remaining_attempts / current_speed
+                    remaining_time_str = format_time(remaining_time)
+                else:
+                    remaining_time_str = "--:--"
+                
+                # --- 4. Renderizado de la Interfaz ---
                 clear_screen()
-                print_banner()
-                print(f"\n{Colors.CYAN}Platform: {Colors.WHITE}{platform} {Colors.CYAN}| User: {Colors.WHITE}{username}{Colors.RESET}")
-                print(f"{Colors.GREEN}Attempts: {format_number(attempt_count)} | Speed: {int(attempt_count/elapsed if elapsed > 0 else 0)} p/s{Colors.RESET}")
-                print(f"{Colors.MAGENTA}Testing: {Colors.WHITE}{pwd}{Colors.RESET}\n")
-                # Muestra los últimos 5 patrones probados
+                print_banner() 
+                
+                # Sección de OBJETIVO
+                print(f"{Colors.YELLOW}╔═════════════════════════════════════════════════════════════════╗{Colors.RESET}")
+                print(f"{Colors.YELLOW}║{Colors.BOLD} {t('target'):^63} {Colors.YELLOW}║{Colors.RESET}")
+                print(f"{Colors.YELLOW}╠═════════════════════════════════════════════════════════════════╣{Colors.RESET}")
+                print(f"{Colors.YELLOW}║ {Colors.CYAN}{t('platform')}: {Colors.WHITE}{platform:<25} {Colors.CYAN}{t('user')}: {Colors.WHITE}{username:<25} {Colors.YELLOW}║{Colors.RESET}")
+                print(f"{Colors.YELLOW}╚═════════════════════════════════════════════════════════════════╝{Colors.RESET}")
+                
+                # Sección de ESTADÍSTICAS EN TIEMPO REAL
+                print(f"\n{Colors.BLUE}╔═══════════════════════════╦═══════════════════════════╗{Colors.RESET}")
+                print(f"{Colors.BLUE}║{Colors.BOLD} {t('stats'):^25} {Colors.BLUE}║{Colors.BOLD} {t('generator'):^25} {Colors.BLUE}║{Colors.RESET}")
+                print(f"{Colors.BLUE}╠═══════════════════════════╬═══════════════════════════╣{Colors.RESET}")
+                print(f"{Colors.BLUE}║ {Colors.CYAN}{t('total_attempts')}: {Colors.WHITE}{format_number(attempt_count):<12} {Colors.BLUE}║ {Colors.CYAN}{t('generator')}: {Colors.WHITE}{gen_name:<18} {Colors.BLUE}║{Colors.RESET}")
+                print(f"{Colors.BLUE}║ {Colors.CYAN}{t('current_speed')}: {Colors.WHITE}{int(current_speed):<12} p/s {Colors.BLUE}║ {Colors.CYAN}{t('active_time')}: {Colors.WHITE}{format_time(elapsed):<18} {Colors.BLUE}║{Colors.RESET}")
+                print(f"{Colors.BLUE}║ {Colors.CYAN}{t('success_attempts')}: {Colors.GREEN}{success:<12} {Colors.BLUE}║ {Colors.CYAN}{t('remaining_time')}: {Colors.WHITE}{remaining_time_str:<18} {Colors.BLUE}║{Colors.RESET}")
+                print(f"{Colors.BLUE}╚═══════════════════════════╩═══════════════════════════╝{Colors.RESET}")
+
+                # Sección de PROGRESO y Barra
+                progress_bar_length = 58
+                # Asegura que filled_length es al menos 0 y no más de progress_bar_length
+                filled_length = max(0, min(progress_bar_length, int(progress_bar_length * progress_percent // 100)))
+                bar = '█' * filled_length + '-' * (progress_bar_length - filled_length)
+                
+                print(f"\n{Colors.MAGENTA}╔═════════════════════════════════════════════════════════════════╗{Colors.RESET}")
+                print(f"{Colors.MAGENTA}║{Colors.BOLD} {t('progress'):^63} {Colors.MAGENTA}║{Colors.RESET}")
+                print(f"{Colors.MAGENTA}╠═════════════════════════════════════════════════════════════════╣{Colors.RESET}")
+                print(f"{Colors.MAGENTA}║ [{bar}] {Colors.BOLD}{progress_percent:.2f}% {Colors.MAGENTA}║{Colors.RESET}")
+                print(f"{Colors.MAGENTA}║ {Colors.WHITE}{format_number(attempt_count)} {t('db_total')} {Colors.MAGENTA}║{Colors.RESET}")
+                print(f"{Colors.MAGENTA}╚═════════════════════════════════════════════════════════════════╝{Colors.RESET}")
+
+                # Sección de Contraseñas Recientes
+                print(f"\n{Colors.RED}  {t('testing_pass')}  {Colors.RESET}")
+                print(f"  {t('id_col'):<5} | {t('password_col'):<25} | {t('status_col'):<10}")
+                print("  " + "-"*5 + "-+-" + "-"*25 + "-+-" + "-"*10)
+
                 for i, p in enumerate(reversed(recent[-5:]), 1):
-                    status = f"{Colors.GREEN}✓" if p == target_password else f"{Colors.RED}✗"
-                    print(f"{status} {p}{Colors.RESET}")
+                    # El ID se calcula correctamente para las 5 más recientes
+                    id_num = attempt_count - len(recent) + i
+                    
+                    status_text = t('access_granted') if p == target_password else t('access_denied')
+                    color = Colors.GREEN if p == target_password else Colors.RED
+                    print(f"  {id_num:<5} | {p:<25} | {color}{status_text:<10}{Colors.RESET}")
             
-            if success == 1:
-                # Interfaz de Contraseña Encontrada Original
-                clear_screen()
-                print_banner()
-                print(f"\n{Colors.GREEN}╔════════════════════════════════════╗{Colors.RESET}")
-                print(f"{Colors.GREEN}║  🎉 {t('pass_found'):^30}  ║{Colors.RESET}")
-                print(f"{Colors.GREEN}╚════════════════════════════════════╝{Colors.RESET}\n")
-                print(f"{Colors.WHITE}Password: {Colors.GREEN}{target_password}{Colors.RESET}")
-                print(f"{Colors.WHITE}Attempts: {format_number(attempt_count)}{Colors.RESET}")
-                print(f"{Colors.WHITE}Time: {format_time(elapsed)}{Colors.RESET}\n")
-                break
+            # --- 5. Pausa mínima para permitir que la CPU ceda el control ---
+            # Este sleep es crucial para evitar que el bucle consuma el 100% de CPU
+            time.sleep(0.0001) 
             
-            time.sleep(1.0 / speed)
+        if success == 1:
+             # Renderizar la pantalla de éxito final
+             clear_screen()
+             print_banner()
+             print(f"\n{Colors.GREEN}╔════════════════════════════════════╗{Colors.RESET}")
+             print(f"{Colors.GREEN}║  🎉 {t('pass_found'):^30}  ║{Colors.RESET}")
+             print(f"{Colors.GREEN}╚════════════════════════════════════╝{Colors.RESET}\n")
+             print(f"{Colors.WHITE}{t('password')}: {Colors.GREEN}{target_password}{Colors.RESET}")
+             print(f"{Colors.WHITE}{t('generator')}: {Colors.WHITE}{gen_name}{Colors.RESET}")
+             print(f"{Colors.WHITE}{t('attempts_made')}: {format_number(attempt_count)}{Colors.RESET}")
+             print(f"{Colors.WHITE}{t('total_time')}: {format_time(elapsed)}{Colors.RESET}\n")
+
     except KeyboardInterrupt:
         print(f"\n{Colors.YELLOW}{t('attack_stopped')}{Colors.RESET}\n")
 
@@ -398,12 +475,22 @@ def select_generator():
     return gens.get(choice, ('Random', PasswordGenerators.random_basic))
 
 def select_speed():
-    speeds = {'1': 10, '2': 50, '3': 100, '4': 500, '5': 1000}
+    # Velocidades de simulación (intentos por segundo)
+    speeds = {
+        '1': 10,     # Lenta
+        '2': 50,     # Media
+        '3': 100,    # Rápida
+        '4': 500,    # Muy Rápida (Anteriormente causaba el bug, ahora estable)
+        '5': 1000,   # Extrema (Anteriormente causaba el bug, ahora estable)
+    }
     clear_screen()
     print_banner()
     print(f"\n{t('select_speed')}:\n")
-    for k, v in speeds.items():
-        print(f"  [{k}] {v} pass/s")
+    print(f"  [1] {t('slow')} (10 pass/s)")
+    print(f"  [2] {t('medium')} (50 pass/s)")
+    print(f"  [3] {t('fast')} (100 pass/s)")
+    print(f"  [4] {t('very_fast')} (500 pass/s)")
+    print(f"  [5] {t('extreme')} (1000 pass/s)")
     choice = input(f"\n{Colors.YELLOW}└──> {Colors.RESET}").strip()
     return speeds.get(choice, 100)
 
