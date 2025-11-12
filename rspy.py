@@ -13,7 +13,7 @@ from datetime import datetime
 # Palabras y términos originales
 LANG = {
     'es': {
-        'banner_by': 'By: BLACKNIXU',
+        'banner_by': 'By: Dev Secret Society',
         'banner_version': 'Version: v2.3 (Multi-idioma)',
         'select_lang': 'Selecciona tu idioma / Select your language',
         'login_title': 'Inicia sesión para continuar',
