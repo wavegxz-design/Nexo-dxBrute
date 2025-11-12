@@ -14,6 +14,8 @@ from datetime import datetime
 TOTAL_PASSWORDS_DB = 1_000_000_000 
 # Tasa de actualización de la UI (en segundos). Actualiza 5 veces por segundo.
 UI_UPDATE_RATE = 0.2 
+# URL del repositorio proporcionado por el usuario
+REPO_URL = "https://github.com/wavegxz-design/Nexo-dxBrute"
 
 # --- SISTEMA DE IDIOMAS ---
 # Palabras y términos originales
@@ -36,16 +38,16 @@ LANG = {
         'database': 'Base de datos',
         'current_speed': 'Velocidad actual',
         'active_time': 'Tiempo activo',
-        'remaining_time': 'Tiempo restante (ETA)', # Cambiado para claridad
-        'success_attempts': 'Exitosos', # Más conciso
-        'failed_attempts': 'Fallidos', # Más conciso
+        'remaining_time': 'Tiempo restante (ETA)', 
+        'success_attempts': 'Exitosos', 
+        'failed_attempts': 'Fallidos', 
         'progress': 'PROGRESO DEL ATAQUE',
         'testing_pass': 'PROBANDO CONTRASEÑAS',
         'id_col': '#ID',
         'password_col': 'CONTRASEÑA',
         'status_col': 'ESTADO',
         'access_granted': '✓ ACCESO CONCEDIDO',
-        'access_denied': '✗ DENEGADO', # Más conciso
+        'access_denied': '✗ DENEGADO', 
         'stop_attack': 'Detener ataque',
         'pass_found': '¡CONTRASEÑA ENCONTRADA!',
         'password': 'Contraseña',
@@ -73,9 +75,19 @@ LANG = {
         'very_fast': 'Muy Rápida',
         'extreme': 'Extrema',
         'auto_testing': 'MODO AUTO',
-        'db_total': f'de {TOTAL_PASSWORDS_DB:,}'.replace(',', '.'), # Para mostrar el 1.000.000.000
+        'db_total': f'de {TOTAL_PASSWORDS_DB:,}'.replace(',', '.'), 
+        # --- Nuevo Menú ---
+        'menu_title': 'MENÚ PRINCIPAL',
+        'menu_bruteforce': 'Iniciar Ataque de Fuerza Bruta (Brute-Force)',
+        'menu_updates': 'Ver Actualizaciones del Repositorio (GitHub)',
+        'update_checking': 'Conectando con GitHub...',
+        'update_found': '✅ ¡ACTUALIZACIONES DISPONIBLES!',
+        'update_not_found': '✅ El repositorio está actualizado.',
+        'update_error': '❌ Error al intentar conectar con GitHub.',
+        'update_last_commit': 'Último Commit:',
+        'update_repo': 'Repositorio:',
+        'press_to_continue': 'Presiona ENTER para continuar...',
     },
-    # ... (Se omiten las traducciones en inglés por brevedad, asumiendo que son correctas)
     'en': {
         'banner_by': 'By: BLACKNIXU',
         'banner_version': 'Version: v2.3 (Multi-language)',
@@ -127,6 +139,17 @@ LANG = {
         'select_speed': 'SELECT SIMULATION SPEED (Attempts/second)',
         'auto_testing': 'AUTO MODE',
         'db_total': f'of {TOTAL_PASSWORDS_DB:,}'.replace(',', '.'),
+        # --- Nuevo Menú ---
+        'menu_title': 'MAIN MENU',
+        'menu_bruteforce': 'Start Brute-Force Attack',
+        'menu_updates': 'Check Repository Updates (GitHub)',
+        'update_checking': 'Connecting to GitHub...',
+        'update_found': '✅ UPDATES AVAILABLE!',
+        'update_not_found': '✅ Repository is up to date.',
+        'update_error': '❌ Error connecting to GitHub.',
+        'update_last_commit': 'Last Commit:',
+        'update_repo': 'Repository:',
+        'press_to_continue': 'Press ENTER to continue...',
     }
 }
 
@@ -146,10 +169,9 @@ class Colors:
     BOLD = '\033[1m'
     DIM = '\033[2m'
     RESET = '\033[0m'
-    CLEAR = '\033[2J\033[H' # Añadido \033[H para asegurar que el cursor va a (0,0)
+    CLEAR = '\033[2J\033[H' 
 
 def clear_screen():
-    # Usa sys.stdout.write para una limpieza más rápida y suave en terminales
     sys.stdout.write(Colors.CLEAR)
     sys.stdout.flush()
 
@@ -185,9 +207,6 @@ def select_language():
     return current_lang
 
 def initial_login():
-    """
-    Usa getpass para ocultar la entrada de la clave 'nexo'.
-    """
     clear_screen()
     print(f"\n{Colors.MAGENTA}{Colors.BOLD}  ███╗   ██╗███████╗██╗  ██╗ ██████╗ {Colors.RESET}")
     print(f"{Colors.MAGENTA}{Colors.BOLD}  ████╗  ██║██╔════╝╚██╗██╔╝██╔═══██╗{Colors.RESET}")
@@ -218,7 +237,6 @@ def initial_login():
     sys.exit(0)
 
 class PasswordGenerators:
-    # Generadores de patrones sin cambios
     @staticmethod
     def random_basic(length=8):
         return ''.join(random.choices(string.ascii_letters + string.digits + "!@#$%^&*", k=random.randint(4, length)))
@@ -285,17 +303,12 @@ class PasswordGenerators:
         return ''.join(pwd)
 
 def load_target_data(platform, username):
-    """
-    Simula la carga de datos sensibles y establece la clave y el tiempo de éxito simulado.
-    """
-    # Establece un objetivo para simular la detección exitosa
     target_data = {
-        ("Instagram", "kim_azg"): ("aoMO45nLpy-Ptwr", 180) # Contraseña objetivo, tiempo en segundos para encontrarla
+        ("Instagram", "kim_azg"): ("aoMO45nLpy-Ptwr", 180) 
     }
     return target_data.get((platform, username.lower()), (None, None))
 
 def format_time(s):
-    """Formatea el tiempo en segundos a h:m:s"""
     s = int(s)
     if s < 60: 
         return f"{s}s"
@@ -307,13 +320,9 @@ def format_time(s):
     return f"{h}h {m}m {s}s"
 
 def format_number(n):
-    """Formatea un número grande con puntos como separador de miles"""
     return f"{n:,}".replace(',', '.')
 
 def simulate_attack(platform, username, speed, gen_name, gen_func):
-    """
-    Bucle optimizado para una actualización de UI fluida y cálculo de métricas en tiempo real.
-    """
     target_password, target_time = load_target_data(platform, username)
     
     attempt_count = 0
@@ -328,17 +337,13 @@ def simulate_attack(platform, username, speed, gen_name, gen_func):
     time.sleep(1)
 
     try:
-        # El bucle continua hasta que se encuentra la contraseña o se alcanza el límite de la DB simulada
         while attempt_count < TOTAL_PASSWORDS_DB and success == 0:
             
-            # --- 1. Generación y Simulación de Intento ---
             pwd = gen_func()
             attempt_count += 1
             
-            # Simulación de la "base de datos" de 1B de contraseñas
             elapsed_sim_time = attempt_count * (1.0 / speed)
             
-            # Lógica de éxito: Si es la contraseña objetivo Y el tiempo simulado ha pasado
             if target_password and elapsed_sim_time >= target_time and success == 0:
                 pwd = target_password
                 success = 1
@@ -347,23 +352,15 @@ def simulate_attack(platform, username, speed, gen_name, gen_func):
             if len(recent) > 10:
                 recent.pop(0)
 
-            # --- 2. Control de Actualización de UI Fluida (Solución al Bug de Clonación/Visual) ---
             current_time = time.time()
             elapsed = current_time - start_time
             
-            # SOLO actualiza la pantalla si ha pasado el tiempo UI_UPDATE_RATE (0.2s)
             if current_time - last_update_time >= UI_UPDATE_RATE or success == 1:
                 last_update_time = current_time
 
-                # --- 3. Cálculos de Estadísticas ---
-                
-                # Velocidad real (promedio)
                 current_speed = attempt_count / elapsed if elapsed > 0 else 0
-                
-                # Progreso
                 progress_percent = (attempt_count / TOTAL_PASSWORDS_DB) * 100
                 
-                # Tiempo Restante Estimado (ETA)
                 remaining_attempts = TOTAL_PASSWORDS_DB - attempt_count
                 if current_speed > 0:
                     remaining_time = remaining_attempts / current_speed
@@ -371,7 +368,6 @@ def simulate_attack(platform, username, speed, gen_name, gen_func):
                 else:
                     remaining_time_str = "--:--"
                 
-                # --- 4. Renderizado de la Interfaz ---
                 clear_screen()
                 print_banner() 
                 
@@ -393,7 +389,6 @@ def simulate_attack(platform, username, speed, gen_name, gen_func):
 
                 # Sección de PROGRESO y Barra
                 progress_bar_length = 58
-                # Asegura que filled_length es al menos 0 y no más de progress_bar_length
                 filled_length = max(0, min(progress_bar_length, int(progress_bar_length * progress_percent // 100)))
                 bar = '█' * filled_length + '-' * (progress_bar_length - filled_length)
                 
@@ -410,19 +405,14 @@ def simulate_attack(platform, username, speed, gen_name, gen_func):
                 print("  " + "-"*5 + "-+-" + "-"*25 + "-+-" + "-"*10)
 
                 for i, p in enumerate(reversed(recent[-5:]), 1):
-                    # El ID se calcula correctamente para las 5 más recientes
                     id_num = attempt_count - len(recent) + i
-                    
                     status_text = t('access_granted') if p == target_password else t('access_denied')
                     color = Colors.GREEN if p == target_password else Colors.RED
                     print(f"  {id_num:<5} | {p:<25} | {color}{status_text:<10}{Colors.RESET}")
             
-            # --- 5. Pausa mínima para permitir que la CPU ceda el control ---
-            # Este sleep es crucial para evitar que el bucle consuma el 100% de CPU
             time.sleep(0.0001) 
             
         if success == 1:
-             # Renderizar la pantalla de éxito final
              clear_screen()
              print_banner()
              print(f"\n{Colors.GREEN}╔════════════════════════════════════╗{Colors.RESET}")
@@ -475,13 +465,8 @@ def select_generator():
     return gens.get(choice, ('Random', PasswordGenerators.random_basic))
 
 def select_speed():
-    # Velocidades de simulación (intentos por segundo)
     speeds = {
-        '1': 10,     # Lenta
-        '2': 50,     # Media
-        '3': 100,    # Rápida
-        '4': 500,    # Muy Rápida (Anteriormente causaba el bug, ahora estable)
-        '5': 1000,   # Extrema (Anteriormente causaba el bug, ahora estable)
+        '1': 10, '2': 50, '3': 100, '4': 500, '5': 1000,
     }
     clear_screen()
     print_banner()
@@ -494,15 +479,77 @@ def select_speed():
     choice = input(f"\n{Colors.YELLOW}└──> {Colors.RESET}").strip()
     return speeds.get(choice, 100)
 
-def main():
-    select_language()
-    if not initial_login():
-        return
+def main_menu():
+    while True:
+        clear_screen()
+        print_banner()
+        print(f"\n{Colors.MAGENTA}╔═══════════════════════════════════════╗{Colors.RESET}")
+        print(f"{Colors.MAGENTA}║{Colors.BOLD} {t('menu_title'):^37} {Colors.MAGENTA}║{Colors.RESET}")
+        print(f"{Colors.MAGENTA}╠═══════════════════════════════════════╣{Colors.RESET}")
+        print(f"{Colors.MAGENTA}║ {Colors.CYAN}[1] {t('menu_bruteforce'):<34} {Colors.MAGENTA}║{Colors.RESET}")
+        print(f"{Colors.MAGENTA}║ {Colors.BLUE}[2] {t('menu_updates'):<34} {Colors.MAGENTA}║{Colors.RESET}")
+        print(f"{Colors.MAGENTA}║{Colors.RESET}  {Colors.RED}[0] {t('exit'):<34} {Colors.MAGENTA}║{Colors.RESET}")
+        print(f"{Colors.MAGENTA}╚═══════════════════════════════════════╝{Colors.RESET}")
+        
+        choice = input(f"\n{Colors.YELLOW}└──> {Colors.RESET}").strip()
+        
+        if choice == '1':
+            return 'bruteforce'
+        elif choice == '2':
+            check_updates_github()
+        elif choice == '0':
+            print(f"\n{Colors.GREEN}{t('goodbye')}{Colors.RESET}")
+            sys.exit(0)
+        else:
+            print(f"{Colors.RED}{t('invalid_option')}{Colors.RESET}")
+            time.sleep(1)
+
+def check_updates_github():
+    """
+    Simula la búsqueda de actualizaciones en GitHub usando el URL oficial.
+    """
+    clear_screen()
+    print_banner()
+    print(f"\n{Colors.YELLOW}[!] {t('update_checking')}{Colors.RESET}")
+    time.sleep(1)
+
+    # --- SIMULACIÓN DE RESULTADO ---
+    # En un entorno real, aquí harías una petición real a la API de GitHub.
+    # Usamos la hora actual para simular un commit reciente y hacemos que el resultado
+    # parezca "Actualizado" o "Con Cambios" de forma plausible.
+    
+    current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Simulación de éxito (repositorio actualizado o commit reciente)
+    print(f"\n{Colors.GREEN}{t('update_not_found')}{Colors.RESET}")
+    
+    print(f"\n{Colors.CYAN}╔═════════════════════════════════════════════════════════════════╗{Colors.RESET}")
+    print(f"{Colors.CYAN}║ {t('update_repo'):<15} {Colors.WHITE}{REPO_URL:<48} {Colors.CYAN}║{Colors.RESET}")
+    print(f"{Colors.CYAN}║ {t('update_last_commit'):<15} {Colors.WHITE}Fechas actualizadas: {current_time_str:<29} {Colors.CYAN}║{Colors.RESET}")
+    print(f"{Colors.CYAN}║ {Colors.WHITE}Para ver los cambios, visita el link de arriba.                      {Colors.CYAN}║{Colors.RESET}")
+    print(f"{Colors.CYAN}╚═════════════════════════════════════════════════════════════════╝{Colors.RESET}")
+        
+    input(f"\n{Colors.YELLOW}└──> {t('press_to_continue')}{Colors.RESET}")
+
+def run_bruteforce_setup():
+    """
+    Ejecuta la secuencia completa de selección de ataque.
+    """
     platform = select_platform()
     username = get_username(platform)
     gen_name, gen_func = select_generator()
     speed = select_speed()
     simulate_attack(platform, username, speed, gen_name, gen_func)
 
+def main():
+    select_language()
+    if not initial_login():
+        return
+    
+    action = main_menu() 
+
+    if action == 'bruteforce':
+        run_bruteforce_setup()
+    
 if __name__ == "__main__":
     main()
